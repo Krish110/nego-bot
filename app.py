@@ -9,7 +9,6 @@ st.markdown("""
     .stButton>button { width: 100%; border-radius: 8px; font-weight: bold; border: 1px solid #1f77b4; }
     .stButton>button:hover { background-color: #1f77b4; color: white; }
     .status-box { padding: 15px; border-radius: 10px; background-color: #f0f2f6; margin-bottom: 20px;}
-    .product-card { padding: 15px; border: 1px solid #ddd; border-radius: 10px; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -23,13 +22,14 @@ CATALOG = {
 
 # --- SESSION STATE INITIALIZATION ---
 if "phase" not in st.session_state:
-    st.session_state.phase = "storefront" # Can be 'storefront' or 'negotiation'
+    st.session_state.phase = "storefront" 
 if "wallet" not in st.session_state:
-    st.session_state.wallet = 10000 # Starting budget
+    st.session_state.wallet = 10000 
 if "purchases" not in st.session_state:
     st.session_state.purchases = []
+if "failed_deals" not in st.session_state: # Tracks failed negotiations
+    st.session_state.failed_deals = []
 
-# Negotiation-specific state
 def init_negotiation_state():
     st.session_state.stage = 0
     st.session_state.chat_history = []
@@ -68,34 +68,57 @@ if st.session_state.phase == "storefront":
     st.subheader("🛒 Max Storefront")
     
     col1, col2 = st.columns([3, 1])
+    
+    # RIGHT COLUMN: WALLET & RESET
     with col2:
         st.markdown("<div class='status-box'>", unsafe_allow_html=True)
         st.metric("💳 Your Wallet", f"₹{st.session_state.wallet}")
         if st.session_state.purchases:
             st.write("**Inventory:**")
             for item in st.session_state.purchases:
-                st.write(f"- {item}")
+                st.write(f"- ✅ {item}")
         st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Reset Game Button
+        if st.button("🔄 Reset Entire Game", type="primary"):
+            st.session_state.wallet = 10000
+            st.session_state.purchases = []
+            st.session_state.failed_deals = []
+            st.rerun()
 
+    # LEFT COLUMN: PRODUCT GRID
     with col1:
         st.write("Select an item to approach the salesperson about:")
         cols = st.columns(4)
         for i, (item_name, details) in enumerate(CATALOG.items()):
             with cols[i % 4]:
-                st.markdown(f"<div class='product-card'>", unsafe_allow_html=True)
-                st.markdown(f"<h1>{details['emoji']}</h1>", unsafe_allow_html=True)
-                st.markdown(f"**{item_name}**")
-                st.markdown(f"MRP: ₹{details['mrp']}")
-                
-                if st.session_state.wallet < details['mrp'] * 0.5: # User doesn't even have half the MRP
-                    st.error("Insufficient Funds")
-                else:
-                    if st.button(f"Negotiate", key=item_name):
-                        st.session_state.selected_item = item_name
-                        st.session_state.phase = "negotiation"
-                        init_negotiation_state()
-                        st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
+                # Using Streamlit's native container for a clean box layout
+                with st.container(border=True):
+                    
+                    # 1. Status Indicator
+                    if item_name in st.session_state.purchases:
+                        st.markdown("<p style='text-align:center; color: #28a745; font-weight:bold; margin-bottom: 5px;'>✅ Deal Done</p>", unsafe_allow_html=True)
+                    elif item_name in st.session_state.failed_deals:
+                        st.markdown("<p style='text-align:center; color: #dc3545; font-weight:bold; margin-bottom: 5px;'>❌ No Deal</p>", unsafe_allow_html=True)
+                    else:
+                        st.markdown("<p style='text-align:center; color: gray; margin-bottom: 5px;'>🟢 Available</p>", unsafe_allow_html=True)
+                    
+                    # 2. Product Details
+                    st.markdown(f"<h1 style='text-align:center; margin-top: 0;'>{details['emoji']}</h1>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='text-align:center;'><strong>{item_name}</strong><br>MRP: ₹{details['mrp']}</p>", unsafe_allow_html=True)
+                    
+                    # 3. Dynamic Button Logic
+                    if item_name in st.session_state.purchases:
+                        st.button("Purchased", key=item_name, disabled=True)
+                    elif st.session_state.wallet < details['mrp'] * 0.5:
+                        st.button("Insufficient Funds", key=item_name, disabled=True)
+                    else:
+                        btn_text = "Retry Negotiation" if item_name in st.session_state.failed_deals else "Negotiate"
+                        if st.button(btn_text, key=item_name):
+                            st.session_state.selected_item = item_name
+                            st.session_state.phase = "negotiation"
+                            init_negotiation_state()
+                            st.rerun()
 
 
 # ==========================================
@@ -128,7 +151,6 @@ elif st.session_state.phase == "negotiation":
             st.rerun()
 
     with col_chat:
-        # Dynamic Math Variables for the choices
         lowball_price = int(mrp * 0.4)
         batna_price = int(mrp * 0.65)
         manager_price = int(mrp * 0.95)
@@ -136,7 +158,6 @@ elif st.session_state.phase == "negotiation":
         app_price = int(mrp * 0.85)
         split_price = int((match_price + batna_price) / 2)
 
-        # STAGE 0: Initialize
         if st.session_state.stage == 0 and len(st.session_state.chat_history) == 0:
             add_message("assistant", f"Welcome! I see you're looking at our {item_type}. The MRP is ₹{mrp}. It's a great choice. Shall I bill it for you?")
 
@@ -146,6 +167,9 @@ elif st.session_state.phase == "negotiation":
 
         if st.session_state.game_over:
             st.error("🚨 **Negotiation Breakdown:** The tension hit 100%. The salesperson got offended and walked away. No deal.")
+            # Record the failure
+            if item not in st.session_state.failed_deals:
+                st.session_state.failed_deals.append(item)
             if st.button("Return to Store"):
                 return_to_store()
                 st.rerun()
@@ -226,12 +250,16 @@ elif st.session_state.phase == "negotiation":
 
                 if len(st.session_state.chat_history) == 4:
                     add_message("assistant", outcome_msg)
-                    st.session_state.current_price = final_paid # Update UI display
+                    st.session_state.current_price = final_paid 
                     
                     if success:
-                        # Deduct from wallet and add to inventory
                         st.session_state.wallet -= final_paid
                         st.session_state.purchases.append(item)
+                        if item in st.session_state.failed_deals:
+                            st.session_state.failed_deals.remove(item) # Remove failure badge if they retry and succeed
+                    else:
+                        if item not in st.session_state.failed_deals:
+                            st.session_state.failed_deals.append(item) # Add failure badge
                     
                     st.rerun()
                 
