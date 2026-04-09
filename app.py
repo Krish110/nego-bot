@@ -8,12 +8,11 @@ st.markdown("""
 <style>
     .stButton>button { width: 100%; border-radius: 8px; font-weight: bold; border: 1px solid #1f77b4; }
     .stButton>button:hover { background-color: #1f77b4; color: white; }
-    .status-box { padding: 15px; border-radius: 10px; background-color: #f0f2f6; margin-bottom: 20px;}
+    .status-box { padding: 15px; border-radius: 10px; background-color: rgba(128, 128, 128, 0.1); margin-bottom: 20px;}
 </style>
 """, unsafe_allow_html=True)
 
 # --- PRODUCT CATALOG & UNIQUE SCENARIOS ---
-# This dictionary contains completely unique dialogues and tactics for each item.
 SCENARIOS = {
     "Premium Winter Jacket": {
         "mrp": 4999, "emoji": "🧥", "type": "jacket",
@@ -83,12 +82,35 @@ SCENARIOS = {
                 {"text": "B) [Accept] 'Deal. Wrap the case and glasses.'", "outcome": "success", "price": 2499, "msg": "Salesperson: 'Perfect, let's head to billing.'"}
             ]
         }
+    },
+    "Silk Formal Shirt": {
+        "mrp": 1999, "emoji": "👔", "type": "shirt",
+        "intro": "Ah, the Silk Blend Formal. Perfect for corporate wear. MRP is ₹1999.",
+        "stage0": [
+            {"text": "A) [Nitpicking] 'There's a loose thread on the cuff. I'll give you ₹1000.'", "strategy": "Nitpick", "reply": "Sir, that's just a surface fiber, the stitching is intact. The lowest I can go is ₹1800.", "price": 1800, "tension": 40},
+            {"text": "B) [Student/Corp ID] 'Do you offer a student or corporate discount on formal wear?'", "strategy": "Discount", "reply": "Yes, with a valid college or corporate ID, I can apply a flat discount, bringing it to ₹1699.", "price": 1699, "tension": -5},
+            {"text": "C) [Volume Bluff] 'If I was buying 5 of these, what would the price be? Apply that to just this one.'", "strategy": "Volume", "reply": "Haha, I appreciate the hustle, but volume discounts require actual volume. I'll meet you at ₹1750.", "price": 1750, "tension": 10}
+        ],
+        "stage1": {
+            "Nitpick": [
+                {"text": "A) [Hold Ground] '₹1400 or I buy it from Zara.'", "outcome": "success", "price": 1400, "msg": "Salesperson: 'Fine, ₹1400. But no returns on discounted items.'"},
+                {"text": "B) [Walk Away] 'Never mind, I don't want damaged goods.'", "outcome": "fail", "msg": "Salesperson: 'It's not damaged, but okay. Have a good day.'"}
+            ],
+            "Discount": [
+                {"text": "A) [Push for Round Number] 'Make it an even ₹1500 and we have a deal.'", "outcome": "success", "price": 1500, "msg": "Salesperson: 'Alright, ₹1500. I'll process it under our special promo code.'"},
+                {"text": "B) [Accept] '₹1699 sounds fair.'", "outcome": "success", "price": 1699, "msg": "Salesperson: 'Great, please keep your ID handy for billing.'"}
+            ],
+            "Volume": [
+                {"text": "A) [Push Harder] 'Come on, just do ₹1600.'", "outcome": "fail", "msg": "Salesperson: 'I can't authorize that. ₹1750 is my limit. Since we can't agree, let's just leave it.'"},
+                {"text": "B) [Accept] 'Fair enough, ₹1750 it is.'", "outcome": "success", "price": 1750, "msg": "Salesperson: 'Smart choice. It's a great shirt.'"}
+            ]
+        }
     }
 }
 
 # --- SESSION STATE INITIALIZATION ---
 if "phase" not in st.session_state: st.session_state.phase = "storefront" 
-if "wallet" not in st.session_state: st.session_state.wallet = 6500 # LOWERED WALLET!
+if "wallet" not in st.session_state: st.session_state.wallet = 7500 # NEW WALLET CHALLENGE AMOUNT
 if "purchases" not in st.session_state: st.session_state.purchases = []
 if "failed_deals" not in st.session_state: st.session_state.failed_deals = []
 
@@ -103,8 +125,8 @@ def init_negotiation(item_name):
     st.session_state.phase = "negotiation"
 
 # --- HEADER ---
-st.title("🛍️ The ₹6.5k Challenge: Retail Simulator")
-st.markdown("**Rule:** You only have **₹6,500**. The total value of the store is over ₹11,000. If you accept bad deals, your wallet will drain and you will fail to buy everything!")
+st.title("🛍️ The ₹7.5k Challenge: Retail Simulator")
+st.markdown("**Rule:** You only have **₹7,500**. The total value of the store is over ₹13,000. If you accept bad deals, your wallet will drain and you will fail to buy everything!")
 st.divider()
 
 # ==========================================
@@ -117,9 +139,8 @@ if st.session_state.phase == "storefront":
     
     with col2:
         st.markdown("<div class='status-box'>", unsafe_allow_html=True)
-        # Warning color if wallet gets low
-        wallet_color = "red" if st.session_state.wallet < 2000 else "black"
-        st.markdown(f"<h3 style='color:{wallet_color}; margin:0;'>💳 Wallet: ₹{st.session_state.wallet}</h3>", unsafe_allow_html=True)
+        # Using Streamlit's native metric so it adapts flawlessly to Light/Dark mode
+        st.metric("💳 Your Wallet", f"₹{st.session_state.wallet}")
         
         if st.session_state.purchases:
             st.write("**Inventory:**")
@@ -128,15 +149,16 @@ if st.session_state.phase == "storefront":
         st.markdown("</div>", unsafe_allow_html=True)
         
         if st.button("🔄 Reset Entire Game", type="primary"):
-            st.session_state.wallet = 6500
+            st.session_state.wallet = 7500
             st.session_state.purchases = []
             st.session_state.failed_deals = []
             st.rerun()
 
     with col1:
-        cols = st.columns(3)
+        # Adjusted to 4 columns to fit the shirt perfectly on one row
+        cols = st.columns(4)
         for i, (item_name, details) in enumerate(SCENARIOS.items()):
-            with cols[i % 3]:
+            with cols[i % 4]:
                 with st.container(border=True):
                     if item_name in st.session_state.purchases:
                         st.markdown("<p style='text-align:center; color: #28a745; font-weight:bold;'>✅ Deal Done</p>", unsafe_allow_html=True)
@@ -170,6 +192,12 @@ elif st.session_state.phase == "negotiation":
         st.metric(label="Target Item", value=f"{scenario['emoji']} {item}")
         st.metric(label="Current Offer (₹)", value=f"₹{st.session_state.current_price}")
         st.metric(label="💳 Wallet Balance", value=f"₹{st.session_state.wallet}")
+        
+        if st.session_state.tension < 50: bar_color = "🟢" 
+        elif st.session_state.tension < 80: bar_color = "🟠"
+        else: bar_color = "🔴"
+            
+        st.markdown(f"**Deal Tension:** {bar_color}")
         st.progress(st.session_state.tension / 100.0)
         st.markdown("</div>", unsafe_allow_html=True)
         
@@ -225,7 +253,6 @@ elif st.session_state.phase == "negotiation":
                         st.session_state.current_price = final_price
                         st.session_state.chat_history.append({"role": "assistant", "content": opt["msg"]})
                         
-                        # THE WALLET PENALTY LOGIC
                         if st.session_state.wallet >= final_price:
                             st.session_state.wallet -= final_price
                             st.session_state.purchases.append(item)
